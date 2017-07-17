@@ -15,7 +15,6 @@ cache:
     - $HOME/.cabal/packages
     - $HOME/.cabal/store
     - $HOME/Library/Caches/Homebrew
-    - $HOME/cabal
 
 before_cache:
   - rm -fv $HOME/.cabal/packages/hackage.haskell.org/build-reports.log
