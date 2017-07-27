@@ -16,6 +16,7 @@ install:
 - stack exec -- pacman --noconfirm -Syu
 - stack exec -- pacman --noconfirm -Syuu
 - stack exec -- pacman --noconfirm -S base-devel mingw-w64-x86_64-pkg-config mingw-w64-x86_64-toolchain mingw-w64-x86_64-gtk2
+- stack exec -- pacman --noconfirm -Sc
 build_script:
 - stack --no-terminal build --only-dependencies
 test_script:
