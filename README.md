@@ -23,6 +23,7 @@ Or using stack:
 ```sh
 stack setup
 stack install
+threadscope
 ```
 
 ### macOS
@@ -42,16 +43,19 @@ Or using stack:
 ```sh
 stack setup
 stack install --flag gtk:have-quartz-gtk
+threadscope
 ```
 
 ### Windows
 
-stack is the recommended tool to build threadscope on Windows.
+Install [stack](https://docs.haskellstack.org/en/stable/install_and_upgrade/#windows) and [MSYS2](http://www.msys2.org).
+
+On an MSYS2 MinGW shell:
 
 ```sh
-stack setup
-stack exec -- pacman --noconfirm --needed -Sy bash pacman pacman-mirrors msys2-runtime msys2-run
-stack exec -- pacman --noconfirm -Syu
-stack exec -- pacman --noconfirm -Syuu
-stack exec -- pacman --noconfirm -S base-devel mingw-w64-x86_64-pkg-config mingw-w64-x86_64-toolchain mingw-w64-x86_64-gtk2
+pacman -S $MINGW_PACKAGE_PREFIX-{gtk2,pkg-config}
+echo 'export PATH=$APPDATA/local/bin:$PATH' >> ~/.profile
+source ~/.profile
+stack install --skip-msys threadscope
+threadscope
 ```
