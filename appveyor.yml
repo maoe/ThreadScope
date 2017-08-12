@@ -20,7 +20,7 @@ install:
 - cabal update
 - cabal --version
 build_script:
-- cabal new-build --only-dependencies
+- cabal new-build -j1 --only-dependencies
 test_script:
-- cabal new-build --ghc-options -Werror
+- cabal new-build -j1 --ghc-options -Werror
 version: '{build}'
