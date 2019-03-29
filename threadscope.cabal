@@ -47,10 +47,17 @@ source-repository head
 Executable threadscope
   Main-is:           Main.hs
   Build-Depends:     base >= 4.10 && < 5,
-                     gtk >= 0.12 && < 0.16,
-                     cairo < 0.14,
-                     glib < 0.14,
-                     pango < 0.14,
+                     colour,
+                     haskell-gi-base,
+                     gi-gdk,
+                     gi-gdkpixbuf,
+                     gi-gtk,
+                     gi-gtk-hs,
+                     gi-cairo,
+                     gi-cairo-connector,
+                     gi-cairo-render,
+                     gi-glib,
+                     gi-pango,
                      binary < 0.11,
                      array < 0.6,
                      mtl < 2.3,
@@ -65,7 +72,7 @@ Executable threadscope
                      template-haskell < 2.16,
                      temporary >= 1.1 && < 1.4
   if os(osx)
-    build-depends:   gtk-mac-integration < 0.4
+    build-depends:   gi-gtkosxapplication
 
   include-dirs:      include
   Extensions:        RecordWildCards, NamedFieldPuns, BangPatterns, PatternGuards
@@ -103,8 +110,7 @@ Executable threadscope
                      GUI.Timeline.Ticks,
                      GUI.Timeline.Types,
                      GUI.Timeline.Render.Constants,
-                     GUI.GtkExtras
-                     Graphics.UI.Gtk.ModelView.TreeView.Compat
+                     GUI.GtkExtras,
                      Paths_threadscope
 
   ghc-options:  -Wall -fwarn-tabs -rtsopts

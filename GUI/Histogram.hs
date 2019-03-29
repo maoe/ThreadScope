@@ -11,8 +11,8 @@ import GUI.Timeline.Render (renderTraces, renderYScaleArea)
 import GUI.Timeline.Render.Constants
 import GUI.Types
 
-import qualified Graphics.Rendering.Cairo as C
-import Graphics.UI.Gtk
+import qualified GI.Cairo as C
+import GI.Gtk
 import qualified GUI.GtkExtras as GtkExt
 
 import Data.IORef
@@ -80,34 +80,27 @@ histogramViewNew builder = do
     ++ "Re-run with <tt>+RTS -lf</tt> to generate them."
 
   -- Program the callback for the capability drawingArea
-  on histogramDrawingArea exposeEvent $
-     C.liftIO $ do
-       maybeEventArray <- readIORef hecsIORef
-       win <- widgetGetDrawWindow histogramDrawingArea
-       (w, windowHeight) <- widgetGetSize histogramDrawingArea
-       case maybeEventArray of
-         Nothing -> return False
-         Just hecs
-           | null (durHistogram hecs) -> do
-               GtkExt.stylePaintLayout
-                 style win
-                 StateNormal True
-                 (Rectangle 0 0 w windowHeight)
-                 histogramDrawingArea ""
-                 4 20
-                 layout
-               return True
-           | otherwise -> do
-               minterval <- readIORef mintervalIORef
-               if windowHeight < 80
-                 then return False
-                 else do
-                   let size = (w, windowHeight - firstTraceY)
-                       params = paramsHist size minterval
-                       rect = Rectangle 0 0 w (snd size)
-                   renderWithDrawable win $
-                     renderTraces params hecs rect
-                   return True
+  on histogramDrawingArea exposeEvent $ C.liftIO $ do
+    maybeEventArray <- readIORef hecsIORef
+    win <- widgetGetDrawWindow histogramDrawingArea
+    (w, windowHeight) <- widgetGetSize histogramDrawingArea
+    case maybeEventArray of
+      Nothing -> return False
+      Just hecs
+        | null (durHistogram hecs) -> do
+          renderLayout style histogramDrawingArea 4 20 layout
+          return True
+        | otherwise -> do
+          minterval <- readIORef mintervalIORef
+          if windowHeight < 80
+            then return False
+            else do
+              let size = (w, windowHeight - firstTraceY)
+                  params = paramsHist size minterval
+                  rect = Rectangle 0 0 w (snd size)
+              renderWithDrawable win $
+                renderTraces params hecs rect
+              return True
 
   -- Redrawing histogramYScaleArea
   histogramYScaleArea `onExpose` \_ -> do

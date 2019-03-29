@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 module GUI.KeyView (
     KeyView,
     keyViewNew,
@@ -6,10 +8,9 @@ module GUI.KeyView (
 import GUI.ViewerColours
 import GUI.Timeline.Render.Constants
 
-import Graphics.UI.Gtk
-import qualified Graphics.UI.Gtk.ModelView.TreeView.Compat as Compat
-import qualified Graphics.Rendering.Cairo as C
-
+import GI.GdkPixbuf
+import GI.Gtk
+import qualified GI.Cairo.Render as C
 
 ---------------------------------------------------------------------------
 
@@ -22,12 +23,14 @@ data KeyView = KeyView
 keyViewNew :: Builder -> IO KeyView
 keyViewNew builder = do
 
-    keyTreeView <- builderGetObject builder castToTreeView "key_list"
+    keyTreeView <- builderGetObject builder "key_list" >>= maybe
+      (fail "object not found: key_list")
+      (unsafeCastTo TreeView)
 
     dw <- widgetGetDrawWindow keyTreeView
     keyEntries  <- createKeyEntries dw keyData
 
-    keyStore    <- listStoreNew keyEntries
+    keyStore    <- seqStoreNew keyEntries
     keyColumn   <- treeViewColumnNew
     imageCell   <- cellRendererPixbufNew
     labelCell   <- cellRendererTextNew
@@ -41,14 +44,14 @@ keyViewNew builder = do
 
     let tooltipColumn = makeColumnIdString 0
     customStoreSetColumn keyStore tooltipColumn (\(_,tooltip,_) -> tooltip)
-    Compat.treeViewSetModel keyTreeView (Just keyStore)
+    treeViewSetModel keyTreeView (Just keyStore)
 
     set keyTreeView [ treeViewTooltipColumn := tooltipColumn ]
 
     cellLayoutSetAttributes keyColumn imageCell keyStore $ \(_,_,img) ->
-      [ cellPixbuf := img ]
+      [ #pixbuf := img ]
     cellLayoutSetAttributes keyColumn labelCell keyStore $ \(label,_,_) ->
-      [ cellText := label ]
+      [ #text := label ]
 
     ---------------------------------------------------------------------------
 
@@ -113,8 +116,7 @@ keyData =
   ]
 
 
-createKeyEntries :: DrawableClass dw
-                 => dw
+createKeyEntries :: DrawingArea
                  -> [(String, KeyStyle, Color,String)]
                  -> IO [(String, String, Pixbuf)]
 createKeyEntries similar entries =
@@ -165,7 +167,7 @@ renderKEvent keyColour = do
   C.relLineTo 0 25
   C.stroke
 
-renderToPixbuf :: DrawableClass dw => dw -> (Int, Int) -> C.Render ()
+renderToPixbuf :: DrawingArea -> (Int, Int) -> C.Render ()
                -> IO Pixbuf
 renderToPixbuf similar (w, h) draw = do
   pixmap <- pixmapNew (Just similar) w h Nothing

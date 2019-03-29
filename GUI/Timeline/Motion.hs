@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedLabels #-}
 module GUI.Timeline.Motion (
     zoomIn, zoomOut, zoomToFit,
     scrollLeft, scrollRight, scrollToBeginning, scrollToEnd, scrollTo, centreOnCursor,
@@ -8,7 +9,7 @@ import GUI.Timeline.Types
 import GUI.Timeline.Sparks
 import Events.HECs
 
-import Graphics.UI.Gtk
+import GI.Gtk
 
 import Data.IORef
 import Control.Monad
@@ -68,8 +69,9 @@ zoomToFit TimelineState{scaleIORef, maxSpkIORef,timelineAdj,
       let lastTx = hecLastEventTime hecs
           upper = fromIntegral lastTx
           lower = 0
-      (w, _) <- widgetGetSize timelineDrawingArea
-      let newScaleValue = upper / fromIntegral w
+      allocation <- widgetGetAllocation timelineDrawingArea
+      width <- get allocation #width
+      let newScaleValue = upper / fromIntegral width
           (sliceAll, profAll) = treesProfile newScaleValue 0 lastTx hecs
           -- TODO: verify that no empty lists possible below
           maxmap l = maximum (0 : map (maxSparkRenderedValue sliceAll) l)

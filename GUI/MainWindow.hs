@@ -1,4 +1,10 @@
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+
+{-# LANGUAGE ScopedTypeVariables #-}
 module GUI.MainWindow (
     MainWindow,
     mainWindowNew,
@@ -10,9 +16,11 @@ module GUI.MainWindow (
     eventsSetVisibility,
 
   ) where
+import Data.Foldable (traverse_)
+import Data.Word (Word32)
 
-import Graphics.UI.Gtk as Gtk
-import qualified System.Glib.GObject as Glib
+import GI.Gtk as Gtk
+import qualified Data.Text as T
 
 import GUI.DataFiles (loadLogo)
 
@@ -28,15 +36,12 @@ data MainWindow = MainWindow {
        statusBarCxt       :: ContextId
      }
 
-instance Glib.GObjectClass  MainWindow where
-  toGObject = toGObject . mainWindow
-  unsafeCastGObject = error "cannot downcast to MainView type"
+type ContextId = Word32
 
-instance Gtk.ObjectClass    MainWindow
-instance Gtk.WidgetClass    MainWindow
-instance Gtk.ContainerClass MainWindow
-instance Gtk.BinClass       MainWindow
-instance Gtk.WindowClass    MainWindow
+-- instance GObject MainWindow
+-- instance O.HasParentTypes MainWindow
+-- type instance O.ParentTypes MainWindow =
+--   '[Object, Widget, Container, Bin, Window]
 
 data MainWindowActions = MainWindowActions {
 
@@ -73,13 +78,13 @@ setFileLoaded mainWin Nothing =
     ]
 setFileLoaded mainWin (Just file) =
   set (mainWindow mainWin) [
-      windowTitle := file ++ " - ThreadScope"
+      windowTitle := T.pack $ file ++ " - ThreadScope"
     ]
 
-setStatusMessage :: MainWindow -> String -> IO ()
+setStatusMessage :: MainWindow -> T.Text -> IO ()
 setStatusMessage mainWin msg = do
   statusbarPop  (statusBar mainWin) (statusBarCxt mainWin)
-  statusbarPush (statusBar mainWin) (statusBarCxt mainWin) (' ':msg)
+  statusbarPush (statusBar mainWin) (statusBarCxt mainWin) (" " <> msg)
   return ()
 
 sidebarSetVisibility :: MainWindow -> Bool -> IO ()
@@ -95,44 +100,48 @@ eventsSetVisibility mainWin visible =
 mainWindowNew :: Builder -> MainWindowActions -> IO MainWindow
 mainWindowNew builder actions = do
 
-  let getWidget cast name = builderGetObject builder cast name
+  let getWidget :: GObject a => (ManagedPtr a -> a) -> T.Text -> IO a
+      getWidget ctor name = builderGetObject builder name
+        >>= maybe
+          (fail ("object not found: " ++ T.unpack name))
+          (unsafeCastTo ctor)
 
 
-  mainWindow         <- getWidget castToWindow "main_window"
-  statusBar          <- getWidget castToStatusbar "statusbar"
+  mainWindow         <- getWidget Window "main_window"
+  statusBar :: Statusbar <- getWidget Statusbar "statusbar"
 
-  sidebarBox         <- getWidget castToWidget "sidebar"
-  eventsBox          <- getWidget castToWidget "eventsbox"
+  sidebarBox         <- getWidget Widget "sidebar"
+  eventsBox          <- getWidget Widget "eventsbox"
 
-  bwToggle           <- getWidget castToCheckMenuItem "black_and_white"
-  labModeToggle      <- getWidget castToCheckMenuItem "view_labels_mode"
-  sidebarToggle      <- getWidget castToCheckMenuItem "view_sidebar"
-  eventsToggle       <- getWidget castToCheckMenuItem "view_events"
-  openMenuItem       <- getWidget castToMenuItem "openMenuItem"
-  exportMenuItem     <- getWidget castToMenuItem "exportMenuItem"
-  reloadMenuItem     <- getWidget castToMenuItem "view_reload"
-  quitMenuItem       <- getWidget castToMenuItem "quitMenuItem"
-  websiteMenuItem    <- getWidget castToMenuItem "websiteMenuItem"
-  tutorialMenuItem   <- getWidget castToMenuItem "tutorialMenuItem"
-  aboutMenuItem      <- getWidget castToMenuItem "aboutMenuItem"
+  bwToggle           <- getWidget CheckMenuItem "black_and_white"
+  labModeToggle      <- getWidget CheckMenuItem "view_labels_mode"
+  sidebarToggle      <- getWidget CheckMenuItem "view_sidebar"
+  eventsToggle       <- getWidget CheckMenuItem "view_events"
+  openMenuItem       <- getWidget MenuItem "openMenuItem"
+  exportMenuItem     <- getWidget MenuItem "exportMenuItem"
+  reloadMenuItem     <- getWidget MenuItem "view_reload"
+  quitMenuItem       <- getWidget MenuItem "quitMenuItem"
+  websiteMenuItem    <- getWidget MenuItem "websiteMenuItem"
+  tutorialMenuItem   <- getWidget MenuItem "tutorialMenuItem"
+  aboutMenuItem      <- getWidget MenuItem "aboutMenuItem"
 
-  firstMenuItem      <- getWidget castToMenuItem "move_first"
-  centreMenuItem     <- getWidget castToMenuItem "move_centre"
-  lastMenuItem       <- getWidget castToMenuItem "move_last"
+  firstMenuItem      <- getWidget MenuItem "move_first"
+  centreMenuItem     <- getWidget MenuItem "move_centre"
+  lastMenuItem       <- getWidget MenuItem "move_last"
 
-  zoomInMenuItem     <- getWidget castToMenuItem "move_zoomin"
-  zoomOutMenuItem    <- getWidget castToMenuItem "move_zoomout"
-  zoomFitMenuItem    <- getWidget castToMenuItem "move_zoomfit"
+  zoomInMenuItem     <- getWidget MenuItem "move_zoomin"
+  zoomOutMenuItem    <- getWidget MenuItem "move_zoomout"
+  zoomFitMenuItem    <- getWidget MenuItem "move_zoomfit"
 
-  openButton         <- getWidget castToToolButton "cpus_open"
+  openButton         <- getWidget ToolButton "cpus_open"
 
-  firstButton        <- getWidget castToToolButton "cpus_first"
-  centreButton       <- getWidget castToToolButton "cpus_centre"
-  lastButton         <- getWidget castToToolButton "cpus_last"
+  firstButton        <- getWidget ToolButton "cpus_first"
+  centreButton       <- getWidget ToolButton "cpus_centre"
+  lastButton         <- getWidget ToolButton "cpus_last"
 
-  zoomInButton       <- getWidget castToToolButton "cpus_zoomin"
-  zoomOutButton      <- getWidget castToToolButton "cpus_zoomout"
-  zoomFitButton      <- getWidget castToToolButton "cpus_zoomfit"
+  zoomInButton       <- getWidget ToolButton "cpus_zoomin"
+  zoomOutButton      <- getWidget ToolButton "cpus_zoomout"
+  zoomFitButton      <- getWidget ToolButton "cpus_zoomfit"
 
   ------------------------------------------------------------------------
   -- Show everything
@@ -140,8 +149,7 @@ mainWindowNew builder actions = do
 
   ------------------------------------------------------------------------
 
-  logo <- $loadLogo
-  set mainWindow [ windowIcon := logo ]
+  $loadLogo >>= traverse_ (\logo -> set mainWindow [ #icon := logo ])
 
   ------------------------------------------------------------------------
   -- Status bar functionality
@@ -153,33 +161,33 @@ mainWindowNew builder actions = do
   -- Bind all the events
 
   -- Menus
-  on openMenuItem      menuItemActivate $ mainWinOpen actions
-  on exportMenuItem    menuItemActivate $ mainWinExport actions
+  on openMenuItem #activate $ mainWinOpen actions
+  on exportMenuItem #activate $ mainWinExport actions
 
-  on quitMenuItem menuItemActivate $ mainWinQuit actions
-  on mainWindow   objectDestroy    $ mainWinQuit actions
+  on quitMenuItem #activate $ mainWinQuit actions
+  on mainWindow #destroy $ mainWinQuit actions
 
-  on sidebarToggle  checkMenuItemToggled $ checkMenuItemGetActive sidebarToggle
+  on sidebarToggle #toggled $ checkMenuItemGetActive sidebarToggle
                                        >>= mainWinViewSidebar   actions
-  on eventsToggle   checkMenuItemToggled $ checkMenuItemGetActive eventsToggle
+  on eventsToggle #toggled $ checkMenuItemGetActive eventsToggle
                                        >>= mainWinViewEvents    actions
-  on bwToggle       checkMenuItemToggled $ checkMenuItemGetActive bwToggle
+  on bwToggle #toggled $ checkMenuItemGetActive bwToggle
                                        >>= mainWinViewBW        actions
-  on labModeToggle  checkMenuItemToggled $ checkMenuItemGetActive labModeToggle
+  on labModeToggle #toggled $ checkMenuItemGetActive labModeToggle
                                        >>= mainWinDisplayLabels actions
-  on reloadMenuItem menuItemActivate     $ mainWinViewReload actions
+  on reloadMenuItem #activate $ mainWinViewReload actions
 
-  on websiteMenuItem  menuItemActivate    $ mainWinWebsite actions
-  on tutorialMenuItem menuItemActivate    $ mainWinTutorial actions
-  on aboutMenuItem    menuItemActivate    $ mainWinAbout actions
+  on websiteMenuItem #activate $ mainWinWebsite actions
+  on tutorialMenuItem #activate $ mainWinTutorial actions
+  on aboutMenuItem #activate $ mainWinAbout actions
 
-  on firstMenuItem   menuItemActivate     $ mainWinJumpStart  actions
-  on centreMenuItem  menuItemActivate     $ mainWinJumpCursor actions
-  on lastMenuItem    menuItemActivate     $ mainWinJumpEnd    actions
+  on firstMenuItem #activate $ mainWinJumpStart  actions
+  on centreMenuItem #activate $ mainWinJumpCursor actions
+  on lastMenuItem #activate $ mainWinJumpEnd    actions
 
-  on zoomInMenuItem  menuItemActivate     $ mainWinJumpZoomIn  actions
-  on zoomOutMenuItem menuItemActivate     $ mainWinJumpZoomOut actions
-  on zoomFitMenuItem menuItemActivate     $ mainWinJumpZoomFit actions
+  on zoomInMenuItem #activate $ mainWinJumpZoomIn  actions
+  on zoomOutMenuItem #activate $ mainWinJumpZoomOut actions
+  on zoomFitMenuItem #activate $ mainWinJumpZoomFit actions
 
   -- Toolbar
   onToolButtonClicked openButton $ mainWinOpen       actions

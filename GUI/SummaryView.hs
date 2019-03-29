@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 module GUI.SummaryView (
     SummaryView,
     summaryViewNew,
@@ -9,8 +12,9 @@ import GHC.RTS.Events
 
 import GUI.Types
 
-import Graphics.UI.Gtk
-import qualified Graphics.UI.Gtk.ModelView.TreeView.Compat as Compat
+import GI.Gtk
+import Data.GI.Gtk
+import qualified Data.Text as T
 
 import Control.Exception (assert)
 import Control.Monad
@@ -49,11 +53,11 @@ data SummaryView = SummaryView {
     -- widgets for GC stuff
   , labelGcCopied         :: (Label, Label, Label, Label)
   , labelGcParWorkBalance :: Label
-  , storeGcStats          :: ListStore GcStatsEntry
+  , storeGcStats          :: SeqStore GcStatsEntry
   , tableGc               :: Widget
 
     -- widgets for sparks stuff
-  , storeSparkStats       :: ListStore (Cap, SparkCounts)
+  , storeSparkStats       :: SeqStore (Cap, SparkCounts)
   }
 
 ------------------------------------------------------------------------------
@@ -62,15 +66,18 @@ summaryViewNew :: Builder -> IO SummaryView
 summaryViewNew builder = do
     cacheEventsStats <- newIORef Nothing
 
-    let getWidget cast = builderGetObject builder cast
-        getLabel       = getWidget castToLabel
+    let getWidget ctor name = builderGetObject builder name
+          >>= maybe
+            (fail ("object not found: " ++ T.unpack name))
+            (unsafeCastTo ctor)
+        getLabel       = getWidget Label
         getHeapLabels w1 w2 w3 w4 = liftM4 (,,,) (getLabel w1) (getLabel w2)
                                                  (getLabel w3) (getLabel w4)
 
-    labelTimeTotal        <- getWidget castToLabel "labelTimeTotal"
-    labelTimeMutator      <- getWidget castToLabel "labelTimeMutator"
-    labelTimeGC           <- getWidget castToLabel "labelTimeGC"
-    labelTimeProductivity <- getWidget castToLabel "labelTimeProductivity"
+    labelTimeTotal        <- getLabel "labelTimeTotal"
+    labelTimeMutator      <- getLabel "labelTimeMutator"
+    labelTimeGC           <- getLabel "labelTimeGC"
+    labelTimeProductivity <- getLabel "labelTimeProductivity"
 
 
     labelHeapMaxSize      <- getHeapLabels "labelHeapMaxSize"           "labelHeapMaxSizeUnit"
@@ -83,51 +90,51 @@ summaryViewNew builder = do
                                            "labelHeapAllocRateBytes"    "labelHeapAllocRateUnit1"
     labelHeapMaxSlop      <- getHeapLabels "labelHeapMaxSlop"           "labelHeapMaxSlopUnit"
                                            "labelHeapMaxSlopBytes"      "labelHeapMaxSlopUnit1"
-    tableHeap             <- getWidget castToWidget "tableHeap"
+    tableHeap             <- getWidget Widget "tableHeap"
 
     labelGcCopied         <- getHeapLabels "labelGcCopied"      "labelGcCopiedUnit"
                                            "labelGcCopiedBytes" "labelGcCopiedUnit1"
-    labelGcParWorkBalance <- getWidget castToLabel "labelGcParWorkBalance"
-    storeGcStats          <- listStoreNew []
-    tableGc               <- getWidget castToWidget "tableGC"
+    labelGcParWorkBalance <- getLabel "labelGcParWorkBalance"
+    storeGcStats          <- seqStoreNew []
+    tableGc               <- getWidget Widget "tableGC"
 
-    storeSparkStats       <- listStoreNew []
+    storeSparkStats       <- seqStoreNew []
 
     let summaryView = SummaryView{..}
 
-    treeviewGcStats <- getWidget castToTreeView "treeviewGcStats"
-    Compat.treeViewSetModel treeviewGcStats (Just storeGcStats)
+    treeviewGcStats <- getWidget TreeView "treeviewGcStats"
+    treeViewSetModel treeviewGcStats (Just storeGcStats)
     let addGcColumn = addColumn treeviewGcStats storeGcStats
     addGcColumn "Generation" $ \(GcStatsEntry gen _ _ _ _ _) ->
-      [ cellText := if gen == -1 then "GC Total" else "Gen " ++ show gen ]
+      [ #text := if gen == -1 then "GC Total" else T.pack ("Gen " ++ show gen) ]
     addGcColumn "Collections"     $ \(GcStatsEntry _ colls _ _ _ _) ->
-      [ cellText := show colls ]
+      [ #text := T.pack $ show colls ]
     addGcColumn "Par collections" $ \(GcStatsEntry _ _ pcolls _ _ _) ->
-      [ cellText := show pcolls ]
+      [ #text := T.pack $ show pcolls ]
     addGcColumn "Elapsed time"    $ \(GcStatsEntry _ _ _ time _ _) ->
-      [ cellText := (printf "%5.2fs" (timeToSecondsDbl time) :: String) ]
+      [ #text := T.pack (printf "%5.2fs" (timeToSecondsDbl time) :: String) ]
     addGcColumn "Avg pause"       $ \(GcStatsEntry _ _ _ _ avgpause _) ->
-      [ cellText := (printf "%3.4fs" avgpause :: String) ]
+      [ #text := T.pack (printf "%3.4fs" avgpause :: String) ]
     addGcColumn "Max pause"       $ \(GcStatsEntry _ _ _ _ _ maxpause) ->
-      [ cellText := (printf "%3.4fs" maxpause :: String) ]
+      [ #text := T.pack (printf "%3.4fs" maxpause :: String) ]
 
-    treeviewSparkStats <- getWidget castToTreeView "treeviewSparkStats"
-    Compat.treeViewSetModel treeviewSparkStats (Just storeSparkStats)
+    treeviewSparkStats <- getWidget TreeView "treeviewSparkStats"
+    treeViewSetModel treeviewSparkStats (Just storeSparkStats)
     let addSparksColumn = addColumn treeviewSparkStats storeSparkStats
     addSparksColumn "HEC" $ \(hec, _) ->
-      [ cellText := if hec == -1 then "Total" else "HEC " ++ show hec ]
+      [ #text := if hec == -1 then "Total" else T.pack ("HEC " ++ show hec) ]
     addSparksColumn "Total" $ \(_, SparkCounts total _ _ _ _ _) ->
-      [ cellText := show total ]
+      [ #text := T.pack $ show total ]
     addSparksColumn "Converted" $ \(_, SparkCounts _ conv _ _ _ _) ->
-      [ cellText := show conv ]
+      [ #text := T.pack $ show conv ]
     addSparksColumn "Overflowed" $ \(_, SparkCounts _ _ ovf _ _ _) ->
-      [ cellText := show ovf ]
+      [ #text := T.pack $ show ovf ]
     addSparksColumn "Dud" $ \(_, SparkCounts _ _ _ dud _ _) ->
-      [ cellText := show dud ]
+      [ #text := T.pack $ show dud ]
     addSparksColumn "GC'd" $ \(_, SparkCounts _ _ _ _ gc _) ->
-      [ cellText := show gc ]
+      [ #text := T.pack $ show gc ]
     addSparksColumn "Fizzled" $ \(_, SparkCounts _ _ _ _ _ fiz) ->
-      [ cellText := show fiz ]
+      [ #text := T.pack $ show fiz ]
 
     return summaryView
 
@@ -185,7 +192,7 @@ setSummaryStats view SummaryStats{..} hasHeapEvents = do
 
 setTimeStats :: SummaryView -> TimeStats -> IO ()
 setTimeStats SummaryView{..} TimeStats{..} =
-  mapM_ (\(label, text) -> set label [ labelText := text ])
+  mapM_ (\(label, text) -> set label [ #label := T.pack text ])
     [ (labelTimeTotal       , showFFloat (Just 2) (timeToSecondsDbl timeTotal) "s")
     , (labelTimeMutator     , showFFloat (Just 2) (timeToSecondsDbl timeMutator) "s")
     , (labelTimeGC          , showFFloat (Just 2) (timeToSecondsDbl timeGC) "s")
@@ -210,7 +217,7 @@ setHeapStats SummaryView{..} HeapStats{..} = do
       in setLabels labels texts
 
     setLabels (short,shortunit,long,longunit) (short', shortunit', long', longunit') = do
-      mapM_ (\(label, text) -> set label [ labelText := text ])
+      mapM_ (\(label, text) -> set label [ #label := T.pack text ])
             [ (short, short'), (shortunit, shortunit')
             , (long, long'),   (longunit, longunit') ]
 
@@ -220,14 +227,14 @@ setGcStats SummaryView{..} GcStats{..} = do
   let balText = maybe "N/A"
                       (printf "%.2f%% (serial 0%%, perfect 100%%)")
                       gcParWorkBalance
-  set labelGcParWorkBalance [ labelText := balText ]
-  listStoreClear storeGcStats
-  mapM_ (listStoreAppend storeGcStats) (gcTotalStats:gcGenStats)
+  set labelGcParWorkBalance [ #label := T.pack balText ]
+  seqStoreClear storeGcStats
+  mapM_ (seqStoreAppend storeGcStats) (gcTotalStats:gcGenStats)
 
 setSparkStats :: SummaryView -> SparkStats -> IO ()
 setSparkStats SummaryView{..} SparkStats{..} = do
-  listStoreClear storeSparkStats
-  mapM_ (listStoreAppend storeSparkStats) ((-1,totalSparkStats):capSparkStats)
+  seqStoreClear storeSparkStats
+  mapM_ (seqStoreAppend storeSparkStats) ((-1,totalSparkStats):capSparkStats)
 
 data ByteUnit = TiB | GiB | MiB | KiB | B deriving Show
 
@@ -267,9 +274,8 @@ ppWithCommas =
 
 setSummaryStatsEmpty :: SummaryView -> IO ()
 setSummaryStatsEmpty SummaryView{..} = do
-  mapM_ (\label -> set label [ labelText := ""
-                             , widgetTooltipText
-                               := (Nothing :: Maybe String) ]) $
+  mapM_ (\label -> set label [ #label := ""
+                             , #tooltipText := "" ]) $
     [ labelTimeTotal, labelTimeMutator
     , labelTimeGC, labelTimeProductivity ] ++
     [ w
@@ -277,25 +283,30 @@ setSummaryStatsEmpty SummaryView{..} = do
                    , labelHeapAllocTotal, labelHeapAllocRate
                    , labelHeapMaxSlop, labelGcCopied ]
     , w <- [ a,b,c,d] ]
-  listStoreClear storeGcStats
-  listStoreClear storeSparkStats
+  seqStoreClear storeGcStats
+  seqStoreClear storeSparkStats
 
 setHeapStatsAvailable :: SummaryView -> Bool -> IO ()
 setHeapStatsAvailable SummaryView{..} available
   | available = do
-      forM_ unavailableWidgets $ \widget ->
-        set widget [ widgetTooltipText := (Nothing :: Maybe String)
-                   , widgetSensitive := True ]
+      widgets <- unavailableWidgets
+      forM_ widgets $ \widget ->
+        set widget [ #tooltipText := ""
+                   , #sensitive := True ]
 
   | otherwise = do
-      forM_ allLabels $ \label -> set label [ labelText := "" ]
-      listStoreClear storeGcStats
+      forM_ allLabels $ \label -> set label [ #label := "" ]
+      seqStoreClear storeGcStats
 
       forM_ unavailableLabels  $ \label  ->
-        set label  [ labelText := "(unavailable)" ]
+        set label [ #label := "(unavailable)" ]
 
-      forM_ unavailableWidgets $ \widget ->
-        set widget [ widgetTooltipText := Just msgInfoUnavailable, widgetSensitive := False ]
+      widgets <- unavailableWidgets
+      forM_ widgets $ \widget ->
+        set widget
+          [ #tooltipText := T.pack msgInfoUnavailable
+          , widgetSensitive := False
+          ]
 
   where
     allLabels =
@@ -312,9 +323,13 @@ setHeapStatsAvailable SummaryView{..} available
       [ c | (_,_,c,_) <- [ labelHeapMaxSize, labelHeapMaxResidency
                          , labelHeapAllocTotal, labelHeapAllocRate
                          , labelHeapMaxSlop ] ]
-    unavailableWidgets = [ toWidget labelTimeMutator, toWidget labelTimeGC
-                         , toWidget labelTimeProductivity
-                         , tableHeap, tableGc ]
+    unavailableWidgets = catMaybes <$> sequence
+      [ castTo Widget labelTimeMutator
+      , castTo Widget labelTimeGC
+      , castTo Widget labelTimeProductivity
+      , castTo Widget tableHeap
+      , castTo Widget tableGc
+      ]
     msgInfoUnavailable = "This eventlog does not contain heap or GC information."
 
 ------------------------------------------------------------------------------

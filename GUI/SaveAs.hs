@@ -8,8 +8,8 @@ import GUI.Types
 import Events.HECs
 
 -- Imports for GTK
-import Graphics.UI.Gtk hiding (rectangle)
-import Graphics.Rendering.Cairo
+import GI.Gtk hiding (rectangle)
+import GI.Cairo
   ( Render
   , Operator(..)
   , Format(..)

@@ -3,8 +3,7 @@
 module GUI.Main (runGUI) where
 
 -- Imports for GTK
-import qualified Graphics.UI.Gtk as Gtk
-import System.Glib.GError (failOnGError)
+import qualified GI.Gtk as Gtk
 
 -- Imports from Haskell library
 import Text.Printf
@@ -442,7 +441,7 @@ eventLoop uienv@UIEnv{..} eventlogState = do
 
 runGUI :: Maybe (Either FilePath String) -> IO ()
 runGUI initialTrace = do
-  Gtk.initGUI
+  Gtk.init
 
   App.initApp
 
@@ -467,7 +466,7 @@ runGUI initialTrace = do
 #endif
 
   -- Enter Gtk+ main event loop.
-  Gtk.mainGUI
+  Gtk.main
 
   -- Wait for child event loop to terminate
   -- This lets us wait for any exceptions.

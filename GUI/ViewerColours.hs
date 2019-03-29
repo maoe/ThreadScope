@@ -2,138 +2,130 @@
 --- $Id: ViewerColours.hs#2 2009/07/18 22:48:30 REDMOND\\satnams $
 --- $Source: //depot/satnams/haskell/ThreadScope/ViewerColours.hs $
 -------------------------------------------------------------------------------
+{-# LANGUAGE RecordWildCards #-}
+module GUI.ViewerColours
+  ( Color
+  , setSourceRGBAhex
+    -- * Colours
+  , runningColour
+  , gcColour
+  , gcWaitColour
+  , gcStartColour
+  , gcWorkColour
+  , gcIdleColour
+  , gcEndColour
+  , createThreadColour
+  , seqGCReqColour
+  , parGCReqColour
+  , migrateThreadColour
+  , threadWakeupColour
+  , shutdownColour
+  , labelTextColour
+  , bookmarkColour
+  , fizzledDudsColour
+  , createdConvertedColour
+  , overflowedColour
+  , userMessageColour
+  , outerPercentilesColour
 
-module GUI.ViewerColours (Color, module GUI.ViewerColours) where
+  , module Data.Colour.Names
+  ) where
+import Data.Word (Word16)
 
-import Graphics.UI.Gtk
-import Graphics.Rendering.Cairo
+import Data.Colour.SRGB
+import Data.Colour.Names
+import GI.Cairo.Render
+
+type Color = Colour Double
+
+setSourceRGBAhex
+  :: Color
+  -> Double -- ^ Alpha
+  -> Render ()
+setSourceRGBAhex colour = setSourceRGBA channelRed channelGreen channelBlue
+  where
+    RGB {..} = toSRGB colour
+
+sRGB48 :: (Ord a, Floating a) => Word16 -> Word16 -> Word16 -> Colour a
+sRGB48 = sRGBBounded
 
 -------------------------------------------------------------------------------
 
 -- Colours
 
-runningColour :: Color
+runningColour :: (Ord a, Floating a) => Colour a
 runningColour = darkGreen
 
-gcColour :: Color
+gcColour :: (Ord a, Floating a) => Colour a
 gcColour = orange
 
-gcWaitColour :: Color
+gcWaitColour :: (Ord a, Floating a) => Colour a
 gcWaitColour = lightOrange
 
-gcStartColour, gcWorkColour, gcIdleColour, gcEndColour :: Color
+gcStartColour, gcWorkColour, gcIdleColour, gcEndColour
+  :: (Ord a, Floating a)
+  => Colour a
 gcStartColour = lightOrange
 gcWorkColour  = orange
 gcIdleColour  = lightOrange
 gcEndColour   = lightOrange
 
-createThreadColour :: Color
+createThreadColour :: (Ord a, Floating a) => Colour a
 createThreadColour = lightBlue
 
-seqGCReqColour :: Color
+seqGCReqColour :: (Ord a, Floating a) => Colour a
 seqGCReqColour = cyan
 
-parGCReqColour :: Color
+parGCReqColour :: (Ord a, Floating a) => Colour a
 parGCReqColour = darkBlue
 
-migrateThreadColour :: Color
+migrateThreadColour :: (Ord a, Floating a) => Colour a
 migrateThreadColour = darkRed
 
-threadWakeupColour :: Color
+threadWakeupColour :: (Ord a, Floating a) => Colour a
 threadWakeupColour = green
 
-shutdownColour :: Color
+shutdownColour :: (Ord a, Floating a) => Colour a
 shutdownColour = darkBrown
 
-labelTextColour :: Color
+labelTextColour :: (Ord a, Floating a) => Colour a
 labelTextColour = white
 
-bookmarkColour :: Color
-bookmarkColour = Color 0xff00 0x0000 0xff00 -- pinkish
+bookmarkColour :: (Ord a, Floating a) => Colour a
+bookmarkColour = sRGB48 0xff00 0x0000 0xff00 -- pinkish
 
-fizzledDudsColour, createdConvertedColour, overflowedColour :: Color
+fizzledDudsColour, createdConvertedColour, overflowedColour
+  :: (Ord a, Floating a)
+  => Colour a
 fizzledDudsColour      = grey
 createdConvertedColour = darkGreen
 overflowedColour       = red
 
-userMessageColour :: Color
+userMessageColour :: (Ord a, Floating a) => Colour a
 userMessageColour = darkRed
 
-outerPercentilesColour :: Color
+outerPercentilesColour :: (Ord a, Floating a) => Colour a
 outerPercentilesColour = lightGrey
 
 -------------------------------------------------------------------------------
 
-black :: Color
-black = Color 0 0 0
+lightGrey :: (Ord a, Floating a) => Colour a
+lightGrey = sRGB48 0xD000 0xD000 0xD000
 
-grey :: Color
-grey = Color 0x8000 0x8000 0x8000
+darkGreen :: (Ord a, Floating a) => Colour a
+darkGreen = sRGB48 0x0000 0x6600 0x0000
 
-lightGrey :: Color
-lightGrey = Color 0xD000 0xD000 0xD000
+lightBlue :: (Ord a, Floating a) => Colour a
+lightBlue = sRGB48 0x6600 0x9900 0xFF00
 
-gtkBorderGrey :: Color
-gtkBorderGrey = Color 0xF200 0xF100 0xF000
+darkBlue :: (Ord a, Floating a) => Colour a
+darkBlue = sRGB48 0 0 0xBB00
 
-red :: Color
-red = Color 0xFFFF 0 0
+darkRed :: (Ord a, Floating a) => Colour a
+darkRed = sRGB48 0xcc00 0x0000 0x0000
 
-green :: Color
-green = Color 0 0xFFFF 0
+lightOrange :: (Ord a, Floating a) => Colour a
+lightOrange = sRGB48 0xE000 0xD000 0xB000 -- orange
 
-darkGreen :: Color
-darkGreen = Color 0x0000 0x6600 0x0000
-
-blue :: Color
-blue = Color 0 0 0xFFFF
-
-cyan :: Color
-cyan = Color 0 0xFFFF 0xFFFF
-
-magenta :: Color
-magenta = Color 0xFFFF 0 0xFFFF
-
-lightBlue :: Color
-lightBlue = Color 0x6600 0x9900 0xFF00
-
-darkBlue :: Color
-darkBlue = Color 0 0 0xBB00
-
-purple :: Color
-purple = Color 0x9900 0x0000 0xcc00
-
-darkPurple :: Color
-darkPurple = Color 0x6600 0 0x6600
-
-darkRed :: Color
-darkRed = Color 0xcc00 0x0000 0x0000
-
-orange :: Color
-orange = Color 0xE000 0x7000 0x0000 -- orange
-
-lightOrange :: Color
-lightOrange = Color 0xE000 0xD000 0xB000 -- orange
-
-profileBackground :: Color
-profileBackground = Color 0xFFFF 0xFFFF 0xFFFF
-
-tickColour :: Color
-tickColour = Color 0x3333 0x3333 0xFFFF
-
-darkBrown :: Color
-darkBrown = Color 0x6600 0 0
-
-yellow :: Color
-yellow = Color 0xff00 0xff00 0x3300
-
-white :: Color
-white = Color 0xffff 0xffff 0xffff
-
--------------------------------------------------------------------------------
-setSourceRGBAhex :: Color -> Double -> Render ()
-setSourceRGBAhex (Color r g b) t
-  = setSourceRGBA (fromIntegral r/0xFFFF) (fromIntegral g/0xFFFF)
-                  (fromIntegral b/0xFFFF) t
-
--------------------------------------------------------------------------------
+darkBrown :: (Ord a, Floating a) => Colour a
+darkBrown = sRGB48 0x6600 0 0

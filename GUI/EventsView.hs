@@ -1,4 +1,7 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module GUI.EventsView (
     EventsView,
     eventsViewNew,
@@ -11,21 +14,27 @@ module GUI.EventsView (
     eventsViewScrollToLine,
   ) where
 
-import GHC.RTS.Events
-
-import Graphics.UI.Gtk
-import qualified GUI.GtkExtras as GtkExt
-
 import Control.Monad.Reader
-import Data.Array
+import Data.Int (Int32)
 import Data.IORef
-import qualified Data.Text as T
 import Numeric
+
+import Data.Array
+import GHC.RTS.Events
+import GI.Cairo.Render.Connector (renderWithContext)
+import GI.Cairo.Render
+import GI.Gtk
+import GI.Pango as Pango
+import qualified Data.Text as T
+import qualified GI.Cairo as Cairo
+import qualified GI.Gdk as Gdk
+
+import GUI.GtkExtras (getWidgetAs)
 
 -------------------------------------------------------------------------------
 
 data EventsView = EventsView {
-       drawArea :: !Widget,
+       drawArea :: !DrawingArea,
        adj      :: !Adjustment,
        stateRef :: !(IORef ViewState)
      }
@@ -53,14 +62,12 @@ eventsViewNew :: Builder -> EventsViewActions -> IO EventsView
 eventsViewNew builder EventsViewActions{..} = do
 
   stateRef <- newIORef undefined
-
-  let getWidget cast = builderGetObject builder cast
-  drawArea     <- getWidget castToWidget "eventsDrawingArea"
-  vScrollbar   <- getWidget castToVScrollbar "eventsVScroll"
-  adj          <- get vScrollbar rangeAdjustment
+  drawArea <- getWidgetAs builder "eventsDrawingArea" DrawingArea
+  vScrollbar <- getWidgetAs builder "eventsVScroll" VScrollbar
+  adj <- get vScrollbar #adjustment
 
   -- make the background white
-  widgetModifyBg drawArea StateNormal (Color 0xffff 0xffff 0xffff)
+  -- widgetModifyBg drawArea StateNormal (Color 0xffff 0xffff 0xffff) -- FIXME
   widgetSetCanFocus drawArea True
   --TODO: needs to be reset on each style change ^^
 
@@ -71,15 +78,17 @@ eventsViewNew builder EventsViewActions{..} = do
   let getLineHeight = do
         pangoCtx <- widgetGetPangoContext drawArea
         fontDesc <- contextGetFontDescription pangoCtx
-        metrics  <- contextGetMetrics pangoCtx fontDesc emptyLanguage
-        return $ ascent metrics + descent metrics --TODO: padding?
+        metrics  <- contextGetMetrics pangoCtx (Just fontDesc) Nothing
+        ascent <- fontMetricsGetAscent metrics
+        descent <- fontMetricsGetDescent metrics
+        return $! fromIntegral $ ascent + descent --TODO: padding?
 
   -- We cache the height of each line
   initialLineHeight <- getLineHeight
   -- but have to update it when the font changes
-  on drawArea styleSet $ \_ -> do
+  on drawArea #styleSet $ \_ -> do
     lineHeight' <- getLineHeight
-    modifyIORef stateRef $ \viewstate -> viewstate { lineHeight = lineHeight' }
+    modifyIORef' stateRef $ \viewstate -> viewstate { lineHeight = lineHeight' }
 
   -----------------------------------------------------------------------------
 
@@ -93,15 +102,16 @@ eventsViewNew builder EventsViewActions{..} = do
   -----------------------------------------------------------------------------
   -- Drawing
 
-  on drawArea exposeEvent $ liftIO $ do
-    drawEvents eventsView =<< readIORef stateRef
+  on drawArea #draw $ \context -> do
+    state <- readIORef stateRef
+    renderWithContext (drawEvents context eventsView state) context
     return True
 
   -----------------------------------------------------------------------------
   -- Key navigation
 
-  on drawArea keyPressEvent $ do
-    let scroll by = liftIO $ do
+  on drawArea #keyPressEvent $ \event -> do
+    let scroll by = do
           ViewState{eventsState, lineHeight} <- readIORef stateRef
           pagesize <- get adj adjustmentPageSize
           let pagejump = max 1 (truncate (pagesize / lineHeight) - 1)
@@ -114,28 +124,24 @@ eventsViewNew builder EventsViewActions{..} = do
                 range@(_,end) = bounds eventsArr
           return True
 
-    key <- eventKeyName
-#if MIN_VERSION_gtk(0,13,0)
-    case T.unpack key of
-#else
+    key <- get event #keyval
     case key of
-#endif
-      "Up"        -> scroll (\_page _end  pos -> pos-1)
-      "Down"      -> scroll (\_page _end  pos -> pos+1)
-      "Page_Up"   -> scroll (\ page _end  pos -> pos-page)
-      "Page_Down" -> scroll (\ page _end  pos -> pos+page)
-      "Home"      -> scroll (\_page _end _pos -> 0)
-      "End"       -> scroll (\_page  end _pos -> end)
-      "Left"      -> return True
-      "Right"     -> return True
-      _           -> return False
+      Gdk.KEY_Up -> scroll (\_page _end pos -> pos - 1)
+      Gdk.KEY_Down -> scroll (\_page _end pos -> pos + 1)
+      Gdk.KEY_Page_Up -> scroll (\page _end pos -> pos - page)
+      Gdk.KEY_Page_Down -> scroll (\page _end pos -> pos + page)
+      Gdk.KEY_Home -> scroll (\_page _end _pos -> 0)
+      Gdk.KEY_End -> scroll (\_page end _pos -> end)
+      Gdk.KEY_Left -> return True
+      Gdk.KEY_Right -> return True
+      _ -> return False
 
   -----------------------------------------------------------------------------
   -- Scrolling
 
-  set adj [ adjustmentLower := 0 ]
+  set adj [ #lower := 0 ]
 
-  on drawArea sizeAllocate $ \_ ->
+  on drawArea #sizeAllocate $ \_ ->
     updateScrollAdjustment eventsView =<< readIORef stateRef
 
   let hitpointToLine :: ViewState -> Double -> Double -> Maybe Int
@@ -148,31 +154,30 @@ eventsViewNew builder EventsViewActions{..} = do
           hitLine  = truncate ((yOffset + eventY) / lineHeight)
           maxIndex = snd (bounds eventsArr)
 
-  on drawArea buttonPressEvent $ tryEvent $ do
-    (_,y)  <- eventCoordinates
-    liftIO $ do
-      viewState <- readIORef stateRef
-      yOffset <- get adj adjustmentValue
-      widgetGrabFocus drawArea
-      case hitpointToLine viewState yOffset y of
-        Nothing -> return ()
-        Just n  -> eventsViewCursorChanged n
-
-  on drawArea scrollEvent $ do
-    dir <- eventScrollDirection
-    liftIO $ do
-      val      <- get adj adjustmentValue
-      upper    <- get adj adjustmentUpper
-      pagesize <- get adj adjustmentPageSize
-      step     <- get adj adjustmentStepIncrement
-      case dir of
-        ScrollUp   -> set adj [ adjustmentValue := val - step ]
-        ScrollDown -> set adj [ adjustmentValue := min (val + step)
-                                                       (upper - pagesize) ]
-        _          -> return ()
+  on drawArea #buttonPressEvent $ \event -> do
+    y  <- get event #yRoot
+    viewState <- readIORef stateRef
+    yOffset <- get adj #value
+    widgetGrabFocus drawArea
+    case hitpointToLine viewState yOffset y of
+      Nothing -> return ()
+      Just n  -> eventsViewCursorChanged n
     return True
 
-  onValueChanged adj $
+  on drawArea #scrollEvent $ \event -> do
+    dir <- get event #direction
+    val      <- get adj #value
+    upper    <- get adj #upper
+    pagesize <- get adj #pageSize
+    step     <- get adj #stepIncrement
+    case dir of
+      Gdk.ScrollDirectionUp -> set adj [ #value := val - step ]
+      Gdk.ScrollDirectionDown ->
+        set adj [ #value := min (val + step) (upper - pagesize) ]
+      _ -> return ()
+    return True
+
+  on adj #valueChanged $
     widgetQueueDraw drawArea
 
   -----------------------------------------------------------------------------
@@ -232,7 +237,7 @@ updateScrollAdjustment :: EventsView -> ViewState -> IO ()
 updateScrollAdjustment EventsView{drawArea, adj}
                        ViewState{lineHeight, eventsState} = do
 
-  (_,windowHeight) <- widgetGetSize drawArea
+  (_,windowHeight) <- widgetGetSizeRequest drawArea
   let numLines = case eventsState of
                    EventsEmpty             -> 0
                    EventsLoaded{eventsArr} -> snd (bounds eventsArr) + 1
@@ -252,13 +257,13 @@ updateScrollAdjustment EventsView{drawArea, adj}
 
 -------------------------------------------------------------------------------
 
-drawEvents :: EventsView -> ViewState -> IO ()
-drawEvents _ ViewState {eventsState = EventsEmpty} = return ()
-drawEvents EventsView{drawArea, adj}
+drawEvents :: Cairo.Context -> EventsView -> ViewState -> Render ()
+drawEvents _ _ ViewState {eventsState = EventsEmpty} = return ()
+drawEvents context EventsView {drawArea, adj}
            ViewState {lineHeight, eventsState = EventsLoaded{..}} = do
 
-  yOffset    <- get adj adjustmentValue
-  pageSize   <- get adj adjustmentPageSize
+  yOffset    <- get adj #value
+  pageSize   <- get adj #pageSize
 
   -- calculate which lines are visible
   let lower = truncate (yOffset / lineHeight)
@@ -269,18 +274,14 @@ drawEvents EventsView{drawArea, adj}
       begin = lower
       end   = min upper (snd (bounds eventsArr))
 
-  win   <- widgetGetDrawWindow drawArea
-  style <- get drawArea widgetStyle
-  focused <- get drawArea widgetIsFocus
-  let state | focused   = StateSelected
-            | otherwise = StateActive
+  styleCtx <- widgetGetStyleContext drawArea
 
   pangoCtx <- widgetGetPangoContext drawArea
-  layout   <- layoutEmpty pangoCtx
-  layoutSetEllipsize layout EllipsizeEnd
+  layout   <- Pango.layoutNew pangoCtx
+  layoutSetEllipsize layout EllipsizeModeEnd
 
-  (width,clipHeight) <- widgetGetSize drawArea
-  let clipRect = Rectangle 0 0 width clipHeight
+  clipRect <- widgetGetAllocation drawArea
+  width <- get clipRect #width
 
   let -- With average char width, timeWidth is enough for 24 hours of logs
       -- (way more than TS can handle, currently). Aligns nicely with
@@ -290,52 +291,33 @@ drawEvents EventsView{drawArea, adj}
       -- TODO: perhaps limit scroll to the selected interval (perhaps not strictly, but only so that the interval area does not completely vanish from the visible area)?
       timeWidth  = 105
       columnGap  = 20
+      descrWidth :: Int32
       descrWidth = width - timeWidth - columnGap
 
   sequence_
-    [ do when (inside || selected) $
-           GtkExt.stylePaintFlatBox
-             style win
-             state1 ShadowNone
-             clipRect
-             drawArea ""
-             0 (round y) width (round lineHeight)
+    [ do
+        when (inside || selected) $ do
+          renderFrame styleCtx context 0 y (fromIntegral width) lineHeight
+          renderBackground styleCtx context 0 y (fromIntegral width) lineHeight
 
-         -- The event time
-         layoutSetText layout (showEventTime event)
-         layoutSetAlignment layout AlignRight
-         layoutSetWidth layout (Just (fromIntegral timeWidth))
-         GtkExt.stylePaintLayout
-           style win
-           state2 True
-           clipRect
-           drawArea ""
-           0 (round y)
-           layout
+          -- The event time
+          layoutSetText layout (T.pack $ showEventTime event) (-1)
+          layoutSetAlignment layout AlignmentRight
+          layoutSetWidth layout timeWidth
+          renderLayout styleCtx context 0 y layout
 
-         -- The event description text
-         layoutSetText layout (showEventDescr event)
-         layoutSetAlignment layout AlignLeft
-         layoutSetWidth layout (Just (fromIntegral descrWidth))
-         GtkExt.stylePaintLayout
-           style win
-           state2 True
-           clipRect
-           drawArea ""
-           (timeWidth + columnGap) (round y)
-           layout
+          -- The event description text
+          layoutSetText layout (T.pack $ showEventDescr event) (-1)
+          layoutSetAlignment layout AlignmentLeft
+          layoutSetWidth layout descrWidth
+          renderLayout styleCtx context (fromIntegral $ timeWidth + columnGap) y layout
 
     | n <- [begin..end]
     , let y = fromIntegral n * lineHeight - yOffset
           event    = eventsArr ! n
           inside   = maybe False (\ (s, e) -> s <= n && n <= e) mrange
           selected = cursorPos == n
-          (state1, state2)
-            | inside    = (StatePrelight, StatePrelight)
-            | selected  = (state, state)
-            | otherwise = (state, StateNormal)
     ]
-
   where
     showEventTime (Event time _spec _) =
       showFFloat (Just 6) (fromIntegral time / 1000000) "s"

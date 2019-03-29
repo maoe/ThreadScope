@@ -3,12 +3,10 @@
 --- $Source: //depot/satnams/haskell/ThreadScope/CairoDrawing.hs $
 -------------------------------------------------------------------------------
 
-module GUI.Timeline.CairoDrawing
-where
-
-import Graphics.Rendering.Cairo
-import qualified Graphics.Rendering.Cairo as C
+module GUI.Timeline.CairoDrawing where
 import Control.Monad
+
+import GI.Cairo.Render
 
 -------------------------------------------------------------------------------
 
@@ -38,7 +36,7 @@ draw_rectangle :: (Integral x, Integral y, Integral w, Integral h)
                -> Render ()
 draw_rectangle x y w h = do
   rectangle (fromIntegral x) (fromIntegral y) (fromIntegral w) (fromIntegral h)
-  C.fill
+  fill
 
 -------------------------------------------------------------------------------
 
@@ -67,7 +65,7 @@ draw_rectangle_opt' :: Bool -> Double -> Double -> Double -> Double
                     -> Render ()
 draw_rectangle_opt' opt x y w h
   = do rectangle x y (1.0 `max` w) h
-       C.fill
+       fill
        when opt $ do
          setLineWidth 1
          setSourceRGBA 0 0 0 0.7

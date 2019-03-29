@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module GUI.ProgressView (
     ProgressView,
@@ -9,13 +11,14 @@ module GUI.ProgressView (
     startPulse,
   ) where
 
-import Graphics.Rendering.Cairo
-import Graphics.UI.Gtk as Gtk
+import GI.Cairo hiding (new)
+import GI.Gtk as Gtk hiding (new)
 import GUI.GtkExtras
 
-import qualified Control.Concurrent as Concurrent
 import Control.Exception
+import Data.Text (Text)
 import Data.Typeable
+import qualified Control.Concurrent as Concurrent
 
 data ProgressView = ProgressView {
     progressWindow :: Gtk.Window,
@@ -29,7 +32,7 @@ data ProgressView = ProgressView {
 --
 -- The user may cancel the operation at any time.
 --
-withProgress :: WindowClass win => win -> (ProgressView -> IO a) -> IO (Maybe a)
+withProgress :: IsWindow win => win -> (ProgressView -> IO a) -> IO (Maybe a)
 withProgress parent action = do
   self <- Concurrent.myThreadId
   let cancel = throwTo self OperationInterrupted
@@ -41,16 +44,16 @@ data OperationInterrupted = OperationInterrupted
   deriving (Typeable, Show)
 instance Exception OperationInterrupted
 
-setText :: ProgressView -> String -> IO ()
+setText :: ProgressView -> Text -> IO ()
 setText view msg =
   set (progressBar view) [
     progressBarText := msg
   ]
 
-setTitle :: ProgressView -> String -> IO ()
+setTitle :: ProgressView -> Text -> IO ()
 setTitle view msg = do
   set (progressWindow view) [ windowTitle := msg ]
-  set (progressLabel view)  [ labelLabel  := "<b>" ++ msg ++ "</b>" ]
+  set (progressLabel view)  [ labelLabel  := "<b>" <> msg <> "</b>" ]
 
 startPulse :: ProgressView -> IO (IO ())
 startPulse view = do
@@ -73,20 +76,21 @@ setProgress view total current = do
 close :: ProgressView -> IO ()
 close view = widgetDestroy (progressWindow view)
 
-new :: WindowClass win => win -> IO () -> IO ProgressView
+new :: IsWindow win => win -> IO () -> IO ProgressView
 new parent cancelAction = do
-  win <- windowNew
+  win <- windowNew WindowTypeToplevel
+  parentWin <- toWindow parent
   set win [
-      containerBorderWidth := 10,
-      windowTitle := "",
-      windowTransientFor := toWindow parent,
-      windowModal := True,
-      windowWindowPosition := WinPosCenterOnParent,
-      windowDefaultWidth := 400,
-      windowSkipTaskbarHint := True
+      #borderWidth := 10,
+      #title := "",
+      #transientFor := parentWin,
+      #modal := True,
+      #windowPosition := WindowPositionCenterOnParent,
+      #defaultWidth := 400,
+      #skipTaskbarHint := True
     ]
 
-  progText <- labelNew (Nothing :: Maybe String)
+  progText <- labelNew Nothing
   set progText [
       miscXalign := 0,
       labelUseMarkup := True
@@ -94,21 +98,21 @@ new parent cancelAction = do
 
   progress <- progressBarNew
 
-  cancel <- buttonNewFromStock stockCancel
-  onClicked cancel (widgetDestroy win >> cancelAction)
-  onDelete win (\_ -> cancelAction >> return True)
-  on win keyPressEvent $ do
-    keyVal <- eventKeyVal
+  cancel <- buttonNewWithLabel "Cancel"
+  on cancel #clicked $ widgetDestroy win >> cancelAction
+  on win #destroy cancelAction
+  on win #keyPressEvent $ \event -> do
+    keyVal <- get event #keyval
     case keyVal of
-      0xff1b -> liftIO $ cancelAction >> return True
+      0xff1b -> cancelAction >> return True
       _      -> return False
 
   vbox <- vBoxNew False 20
   hbox <- hBoxNew False 0
-  boxPackStart vbox progText PackRepel 10
-  boxPackStart vbox progress PackGrow   5
-  boxPackStart vbox hbox     PackNatural 5
-  boxPackEnd   hbox cancel   PackNatural 0
+  boxPackStart vbox progText True False 10
+  boxPackStart vbox progress True True  5
+  boxPackStart vbox hbox     False False 5
+  boxPackEnd   hbox cancel   False False 0
   containerAdd win vbox
 
   widgetShowAll win

@@ -10,7 +10,7 @@ import Events.EventDuration
 import GUI.Types
 import GUI.ViewerColours
 
-import Graphics.Rendering.Cairo
+import GI.Cairo.Render
 
 import Control.Monad
 import Data.List

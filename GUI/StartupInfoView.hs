@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 module GUI.StartupInfoView (
     StartupInfoView,
     startupInfoViewNew,
@@ -6,21 +8,22 @@ module GUI.StartupInfoView (
 
 import GHC.RTS.Events
 
-import Graphics.UI.Gtk
-import qualified Graphics.UI.Gtk.ModelView.TreeView.Compat as Compat
+import GI.Gtk
+import Data.GI.Gtk
 
 import Data.Array
 import Data.List
 import Data.Maybe
 import Data.Time
 import Data.Time.Clock.POSIX
+import qualified Data.Text as T
 
 -------------------------------------------------------------------------------
 
 data StartupInfoView = StartupInfoView
      { labelProgName      :: Label
-     , storeProgArgs      :: ListStore String
-     , storeProgEnv       :: ListStore (String, String)
+     , storeProgArgs      :: SeqStore String
+     , storeProgEnv       :: SeqStore (String, String)
      , labelProgStartTime :: Label
      , labelProgRtsId     :: Label
      }
@@ -40,28 +43,31 @@ data StartupInfoState
 startupInfoViewNew :: Builder -> IO StartupInfoView
 startupInfoViewNew builder = do
 
-    let getWidget cast = builderGetObject builder cast
+    let getWidget ctor name = builderGetObject builder name
+          >>= maybe
+            (fail ("object not found: " ++ T.unpack name))
+            (unsafeCastTo ctor)
 
-    labelProgName      <- getWidget castToLabel    "labelProgName"
-    treeviewProgArgs   <- getWidget castToTreeView "treeviewProgArguments"
-    treeviewProgEnv    <- getWidget castToTreeView "treeviewProgEnvironment"
-    labelProgStartTime <- getWidget castToLabel    "labelProgStartTime"
-    labelProgRtsId     <- getWidget castToLabel    "labelProgRtsIdentifier"
+    labelProgName      <- getWidget Label    "labelProgName"
+    treeviewProgArgs   <- getWidget TreeView "treeviewProgArguments"
+    treeviewProgEnv    <- getWidget TreeView "treeviewProgEnvironment"
+    labelProgStartTime <- getWidget Label    "labelProgStartTime"
+    labelProgRtsId     <- getWidget Label    "labelProgRtsIdentifier"
 
-    storeProgArgs    <- listStoreNew []
+    storeProgArgs    <- seqStoreNew []
     columnArgs       <- treeViewColumnNew
     cellArgs         <- cellRendererTextNew
 
     treeViewColumnPackStart columnArgs cellArgs True
     treeViewAppendColumn treeviewProgArgs columnArgs
 
-    Compat.treeViewSetModel treeviewProgArgs (Just storeProgArgs)
+    treeViewSetModel treeviewProgArgs (Just storeProgArgs)
 
-    set cellArgs [ cellTextEditable := True ]
+    set cellArgs [ #editable := True ]
     cellLayoutSetAttributes columnArgs cellArgs storeProgArgs $ \arg ->
-      [ cellText := arg ]
+      [ #text := T.pack arg ]
 
-    storeProgEnv     <- listStoreNew []
+    storeProgEnv     <- seqStoreNew []
     columnVar        <- treeViewColumnNew
     cellVar          <- cellRendererTextNew
     columnValue      <- treeViewColumnNew
@@ -72,14 +78,14 @@ startupInfoViewNew builder = do
     treeViewAppendColumn treeviewProgEnv columnVar
     treeViewAppendColumn treeviewProgEnv columnValue
 
-    Compat.treeViewSetModel treeviewProgEnv (Just storeProgEnv)
+    treeViewSetModel treeviewProgEnv (Just storeProgEnv)
 
     cellLayoutSetAttributes columnVar cellVar storeProgEnv $ \(var,_) ->
-      [ cellText := var ]
+      [ #text := T.pack var ]
 
-    set cellValue [ cellTextEditable := True ]
+    set cellValue [ #editable := True ]
     cellLayoutSetAttributes columnValue cellValue storeProgEnv $ \(_,value) ->
-      [ cellText := value ]
+      [ #text := T.pack value ]
 
     let startupInfoView = StartupInfoView{..}
 
@@ -130,17 +136,17 @@ processEvents = foldl' accum (StartupInfoLoaded Nothing Nothing Nothing Nothing 
 
 updateStartupInfo :: StartupInfoView -> StartupInfoState -> IO ()
 updateStartupInfo StartupInfoView{..} StartupInfoLoaded{..} = do
-    set labelProgName      [ labelText := fromMaybe "(unknown)"  progName ]
-    set labelProgStartTime [ labelText := maybe "(unknown)" show progStartTime ]
-    set labelProgRtsId     [ labelText := fromMaybe "(unknown)"  progRtsId ]
-    listStoreClear storeProgArgs
-    mapM_ (listStoreAppend storeProgArgs) (fromMaybe [] progArgs)
-    listStoreClear storeProgEnv
-    mapM_ (listStoreAppend storeProgEnv) (fromMaybe [] progEnv)
+    set labelProgName      [ #label := maybe "(unknown)" T.pack progName ]
+    set labelProgStartTime [ #label := maybe "(unknown)" (T.pack . show) progStartTime ]
+    set labelProgRtsId     [ #label := maybe "(unknown)" T.pack progRtsId ]
+    seqStoreClear storeProgArgs
+    mapM_ (seqStoreAppend storeProgArgs) (fromMaybe [] progArgs)
+    seqStoreClear storeProgEnv
+    mapM_ (seqStoreAppend storeProgEnv) (fromMaybe [] progEnv)
 
 updateStartupInfo StartupInfoView{..} StartupInfoEmpty = do
-    set labelProgName      [ labelText := "" ]
-    set labelProgStartTime [ labelText := "" ]
-    set labelProgRtsId     [ labelText := "" ]
-    listStoreClear storeProgArgs
-    listStoreClear storeProgEnv
+    set labelProgName      [ #label := "" ]
+    set labelProgStartTime [ #label := "" ]
+    set labelProgRtsId     [ #label := "" ]
+    seqStoreClear storeProgArgs
+    seqStoreClear storeProgEnv

@@ -17,7 +17,7 @@ import GUI.Types
 import GUI.ViewerColours
 import GUI.Timeline.Ticks
 
-import Graphics.Rendering.Cairo
+import GI.Cairo.Render
 
 import Control.Monad
 

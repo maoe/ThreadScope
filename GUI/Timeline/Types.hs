@@ -6,8 +6,8 @@ module GUI.Timeline.Types (
 
 import GUI.Types
 
-import Graphics.UI.Gtk
-import Graphics.Rendering.Cairo
+import GI.Gtk
+import GI.Cairo
 import Data.IORef
 
 -----------------------------------------------------------------------------

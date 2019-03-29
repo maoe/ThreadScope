@@ -1,4 +1,6 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE OverloadedLabels #-}
+{-# LANGUAGE OverloadedStrings #-}
 module GUI.Timeline.Render (
     renderView,
     renderTraces,
@@ -21,11 +23,12 @@ import GUI.Types
 import GUI.ViewerColours
 import GUI.Timeline.CairoDrawing
 
-import Graphics.UI.Gtk hiding (rectangle)
-import Graphics.Rendering.Cairo
+import GI.Gtk hiding (rectangle, renderActivity)
+import GI.Cairo.Render
   ( Render
   , Content(..)
   , Operator(..)
+  , Region
   , Surface
   , liftIO
   , withTargetSurface
@@ -48,6 +51,8 @@ import Graphics.Rendering.Cairo
   , restore
   , setSourceRGBA
   )
+import qualified GI.Pango as Pango
+import GI.Gdk (Rectangle)
 
 import Data.IORef
 import Control.Monad
@@ -66,7 +71,8 @@ renderView TimelineState{timelineDrawingArea, timelineVAdj, timelinePrevView}
            params hecs selection bookmarks exposeRegion = do
 
   -- Get state information from user-interface components
-  (w, _) <- widgetGetSize timelineDrawingArea
+  allocation <- widgetGetAllocation timelineDrawingArea
+  w <- get allocation #width
   vadj_value <- adjustmentGetValue timelineVAdj
 
   prev_view <- readIORef timelinePrevView
@@ -203,7 +209,9 @@ timestampToView ViewParameters{scaleValue, hadjValue} ts =
 
 renderTraces :: ViewParameters -> HECs -> Rectangle
              -> Render ()
-renderTraces params@ViewParameters{..} hecs (Rectangle rx _ry rw _rh) = do
+renderTraces params@ViewParameters{..} hecs rectangle = do
+  rx <- get rectangle #x
+  rw <- get rectangle #width
   let scale_rx    = fromIntegral rx * scaleValue
       scale_rw    = fromIntegral rw * scaleValue
       scale_width = fromIntegral width * scaleValue
@@ -296,14 +304,28 @@ scrollView surface old new hecs = do
        else rectangle 0   0 (w + off) h -- scroll left.
     fill
 
-    let rect | old_hadj > new_hadj
-             = Rectangle 0 0 (ceiling off) (height new)
-             | otherwise
-             = Rectangle (truncate (w + off)) 0 (ceiling (-off)) (height new)
+    rect <- new Rectangle $ if old_hadj > new_hadj
+      then
+        [ #x := 0
+        , #y := 0
+        , #width := ceiling off
+        , #height := height new
+        ]
+      else
+        [ #x := truncate (w + off)
+        , #y := 0
+        , #width := ceiling (-off)
+        , #height := height new
+        ]
 
-    case rect of
-      Rectangle x y w h -> rectangle (fromIntegral x) (fromIntegral y)
-                                     (fromIntegral w) (fromIntegral h)
+    (x, y, w, h) <- (,,,)
+      <$> get rect #x
+      <*> get rect #y
+      <*> get rect #width
+      <*> get rect #height
+    rectangle
+      (fromIntegral x) (fromIntegral y)
+      (fromIntegral w) (fromIntegral h)
     setSourceRGBA 0xffff 0xffff 0xffff 0xffff
     fill
 
@@ -381,23 +403,23 @@ drawYScaleArea maxSpkValue maxSparkPool maxYHistogram minterval xoffset
 -- | Render a single Y scale axis, set of ticks and label, or only a label,
 -- if the trace is not a graph.
 drawSingleYScale :: Double -> Double -> Double -> Maybe Interval -> Double -> Int
-                 -> PangoContext -> Trace -> Int
+                 -> Pango.Context -> Trace -> Int
                  -> Render ()
 drawSingleYScale maxSpkValue maxSparkPool maxYHistogram minterval xoffset
                  histogramHeight pcontext trace y = do
   setSourceRGBAhex black 1
   move_to (ox, y + 8)
-  layout <- liftIO $ layoutText pcontext (showTrace minterval trace)
+  layout <- liftIO $ Pango.layoutNew pcontext
   liftIO $ do
-    layoutSetWidth layout (Just $ xoffset - 50)
+    Pango.layoutSetText layout (T.pack $ showTrace minterval trace) (-1)
+    Pango.layoutSetWidth layout (round xoffset - 50)
     -- Note: the following does not always work, see the HACK in Timeline.hs
-    layoutSetAttributes layout [AttrSize minBound maxBound 8,
-                                AttrFamily minBound maxBound
-#if MIN_VERSION_gtk(0,13,0)
-                                  (T.pack "sans serif")]
-#else
-                                  "sans serif"]
-#endif
+    attrList <- atterListNew
+    mapM_ (>>= attrListInsert attrList)
+      [
+      ]
+
+    Pango.layoutSetAttributes layout $ Just
   showLayout layout
   case traceMaxSpark maxSpkValue maxSparkPool maxYHistogram trace of
     Just v  ->

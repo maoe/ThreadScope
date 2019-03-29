@@ -8,9 +8,9 @@ import Control.Exception (IOException, Handler(..), catches)
 import System.IO
 
 import Data.FileEmbed
-import Graphics.UI.Gtk (Pixbuf, pixbufNewFromFile)
+import GI.GLib (GError)
+import GI.GdkPixbuf (Pixbuf, pixbufNewFromFile)
 import Language.Haskell.TH
-import System.Glib (GError)
 import System.IO.Temp
 import qualified Data.ByteString as B
 import qualified Data.Text.Encoding as TE

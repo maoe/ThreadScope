@@ -33,8 +33,8 @@ import GUI.Timeline.Render.Constants
 
 import Events.HECs
 
-import Graphics.UI.Gtk
-import Graphics.Rendering.Cairo ( liftIO )
+import GI.Gtk
+import GI.Cairo ( liftIO )
 
 import Data.IORef
 import Control.Monad
@@ -253,11 +253,7 @@ timelineViewNew builder actions@TimelineViewActions{..} = do
           in withMouseState whenNoMouse >> return True
     keyName <- eventKeyName
     keyVal <- eventKeyVal
-#if MIN_VERSION_gtk(0,13,0)
     case (T.unpack keyName, keyToChar keyVal, keyVal) of
-#else
-    case (keyName, keyToChar keyVal, keyVal) of
-#endif
       ("Right", _, _)   -> liftNoMouse $ scrollRight timelineState
       ("Left",  _, _)   -> liftNoMouse $ scrollLeft  timelineState
       (_ , Just '+', _) -> liftNoMouse $ timelineZoomIn  timelineWin
@@ -467,10 +463,8 @@ mouseRelease view@TimelineView{..} TimelineViewActions{..} state button x =
 
 widgetSetCursor :: WidgetClass widget => widget -> Maybe Cursor -> IO ()
 widgetSetCursor widget cursor = do
-#if MIN_VERSION_gtk(0,12,1)
     dw <- widgetGetDrawWindow widget
     drawWindowSetCursor dw cursor
-#endif
     return ()
 
 -------------------------------------------------------------------------------

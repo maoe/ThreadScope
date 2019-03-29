@@ -28,6 +28,7 @@ import Data.Map (Map)
 import qualified Data.Map as M
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Set (Set)
+import qualified Data.Text as T
 import System.FilePath
 import Text.Printf
 
@@ -91,7 +92,7 @@ registerEvents from progress = do
               Left filename -> filename
               Right test    -> test
 
-  ProgressView.setTitle progress ("Loading " ++ takeFileName msg)
+  ProgressView.setTitle progress (T.pack $ "Loading " ++ takeFileName msg)
 
   buildEventLog progress from
 
@@ -240,14 +241,14 @@ buildEventLog progress from =
 
       treeProgress :: Int -> (DurationTree, EventTree, SparkTree) -> IO ()
       treeProgress hec (tree1, tree2, tree3) = do
-         ProgressView.setText progress $
-                  printf "Building HEC %d/%d" (hec+1) hec_count
-         ProgressView.setProgress progress hec_count hec
-         evaluate tree1
-         evaluate (eventTreeMaxDepth tree2)
-         evaluate (sparkTreeMaxDepth tree3)
-         when (hec_count == 1 || hec == 1)  -- eval only with 2nd HEC
-           (return $! DeepSeq.rnf durHistogram)
+        ProgressView.setText progress $
+          T.pack $ printf "Building HEC %d/%d" (hec+1) hec_count
+        ProgressView.setProgress progress hec_count hec
+        evaluate tree1
+        evaluate (eventTreeMaxDepth tree2)
+        evaluate (sparkTreeMaxDepth tree3)
+        when (hec_count == 1 || hec == 1)  -- eval only with 2nd HEC
+          (return $! DeepSeq.rnf durHistogram)
 
     zipWithM_ treeProgress [0..] trees
     ProgressView.setProgress progress hec_count hec_count

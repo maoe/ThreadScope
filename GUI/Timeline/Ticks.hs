@@ -15,7 +15,7 @@ import GUI.Types
 import GUI.Timeline.CairoDrawing
 import GUI.ViewerColours
 
-import Graphics.Rendering.Cairo
+import GI.Cairo.Render
 import Control.Monad
 import Text.Printf
 
@@ -268,25 +268,15 @@ drawYTicks maxS pos incr xoffset yoffset i =
 
 -- | The \'micro\' symbol.
 mu :: String
-#if MIN_VERSION_cairo(0,12,0) && !MIN_VERSION_cairo(0,12,1)
 -- this version of cairo doesn't handle Unicode properly.
 -- Thus, we do the encoding by hand:
 mu = "\194\181"
-#else
--- Haskell cairo bindings 0.12.1 have proper Unicode support
-mu = "\x00b5"
-#endif
 
 -- | The \'epsilon\' symbol.
 eps :: String
-#if MIN_VERSION_cairo(0,12,0) && !MIN_VERSION_cairo(0,12,1)
 -- this version of cairo doesn't handle Unicode properly.
 -- Thus, we do the encoding by hand:
 eps = "\206\181"
-#else
--- Haskell cairo bindings 0.12.1 have proper Unicode support
-eps = "\x03b5"
-#endif
 
 
 -- | Remove all meaningless trailing zeroes.

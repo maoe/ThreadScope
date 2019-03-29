@@ -1,10 +1,11 @@
+{-# LANGUAGE OverloadedLabels #-}
 {-# LANGUAGE TemplateHaskell #-}
 module GUI.Dialogs where
 
 import GUI.DataFiles (loadLogo)
 import Paths_threadscope (version)
 
-import Graphics.UI.Gtk
+import GI.Gtk
 
 import Data.Version (showVersion)
 import System.FilePath
@@ -12,7 +13,7 @@ import System.FilePath
 
 -------------------------------------------------------------------------------
 
-aboutDialog :: WindowClass window => window -> IO ()
+aboutDialog :: IsWindow window => window -> IO ()
 aboutDialog parent
  = do dialog <- aboutDialogNew
       logo <- $loadLogo
@@ -37,7 +38,7 @@ aboutDialog parent
 
 -------------------------------------------------------------------------------
 
-openFileDialog :: WindowClass window => window -> (FilePath -> IO ()) -> IO ()
+openFileDialog :: IsWindow window => window -> (FilePath -> IO ()) -> IO ()
 openFileDialog parent  open
   = do dialog <- fileChooserDialogNew
                    (Just "Open Profile...")
@@ -59,7 +60,7 @@ openFileDialog parent  open
        fileFilterAddPattern allfiles "*"
        fileChooserAddFilter dialog allfiles
 
-       onResponse dialog $ \response -> do
+       on dialog #response $ \response -> do
          case response of
            ResponseAccept -> do
              mfile <- fileChooserGetFilename dialog
@@ -75,7 +76,7 @@ openFileDialog parent  open
 
 data FileExportFormat = FormatPDF | FormatPNG
 
-exportFileDialog :: WindowClass window => window
+exportFileDialog :: IsWindow window => window
                  -> FilePath
                  -> (FilePath -> FileExportFormat -> IO ())
                  -> IO ()
@@ -141,7 +142,7 @@ exportFileDialog parent oldfile save = do
 
 -------------------------------------------------------------------------------
 
-errorMessageDialog :: WindowClass window => window -> String -> String -> IO ()
+errorMessageDialog :: IsWindow window => window -> String -> String -> IO ()
 errorMessageDialog parent headline explanation = do
 
   dialog <- messageDialogNew (Just (toWindow parent))

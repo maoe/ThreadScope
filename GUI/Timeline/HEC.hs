@@ -11,7 +11,7 @@ import GUI.Timeline.CairoDrawing
 import GUI.Types
 import GUI.ViewerColours
 
-import Graphics.Rendering.Cairo
+import GI.Cairo.Render
 
 import GHC.RTS.Events hiding (Event, GCIdle, GCWork)
 import qualified GHC.RTS.Events as GHC
