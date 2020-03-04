@@ -54,6 +54,7 @@ jobs:
       osx_image: xcode11.3
 before_install:
   - HC=$(echo "/opt/$CC/bin/ghc" | sed 's/-/\//')
+  - echo $HC
   - WITHCOMPILER="-w $HC"
   - HADDOCK=$(echo "/opt/$CC/bin/haddock" | sed 's/-/\//')
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then HADDOCK=$(echo $HADDOCK | sed "s:^/opt:$HOME/.ghc-install:"); fi
