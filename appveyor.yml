@@ -45,7 +45,8 @@ deploy:
    auth_token:
      secure: GMhp5bcepf0KYet023puZZ/jy2r60FfyEqSCNscWKhTsa9bn27ykkNxe/+r1iAGp
    artifact: threadscope.windows.$(platform).ghc-$(GHCVER).zip
-   release: $(appveyor_repo_tag_name)
+   # release: $(appveyor_repo_tag_name)
+   release: test.0
    on:
-     appveyor_repo_tag: true
-     GHCVER: "8.8.2"
+     # appveyor_repo_tag: true
+     GHC_VER: "8.8.2"
