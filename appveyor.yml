@@ -9,7 +9,8 @@ environment:
     APPVEYOR_SAVE_CACHE_ON_ERROR: true
     CABOPTS: "--store-dir=c:/SR --http-transport=plain-http"
   matrix:
-    - GHCVER: "8.8.2"
+    - GHCVER: "8.10.2"
+    - GHCVER: "8.8.4"
     - GHCVER: "8.6.5"
     - GHCVER: "8.4.4"
     - GHCVER: "8.2.2"
@@ -48,4 +49,4 @@ deploy:
    release: $(appveyor_repo_tag_name)
    on:
      appveyor_repo_tag: true
-     GHCVER: "8.8.2"
+     GHCVER: "8.10.2"
