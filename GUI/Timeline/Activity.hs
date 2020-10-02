@@ -93,6 +93,7 @@ actProfile slice start0 end0 t
       (s, e)
         | DurationTreeLeaf ev <- t           = (startTimeOf ev, endTimeOf ev)
         | DurationSplit s _ e _ _ _run _ <- t = (s, e)
+        | otherwise = error "actProfile: bug"
 
       mi = min (start + slice) e
       ma = max start s
